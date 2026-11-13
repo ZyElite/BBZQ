@@ -83,7 +83,7 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
 
                 if (removed > 0) {
                     param.result = filtered
-                    writeBackFilteredItems(param.thisObject, symbols.itemsField, filtered)
+                    writeBackFilteredItems(param.thisObject, symbols.itemsField, original, filtered)
                     log("VideoDetailRelateFilter removed $removed item(s) from ${getItems.declaringClass.name}.${getItems.name}")
                 }
             }.onFailure {
@@ -278,10 +278,16 @@ class VideoDetailRelateFilterHook(env: RoamingEnv) : BaseRoamingHook(env) {
                     ?.apply { isAccessible = true }
             }
 
-    private fun writeBackFilteredItems(target: Any?, field: Field?, items: List<Any?>) {
+    private fun writeBackFilteredItems(
+        target: Any?,
+        field: Field?,
+        original: List<*>,
+        items: List<Any?>,
+    ) {
         if (target == null || field == null) return
         runCatching {
-            field.set(target, items)
+            // Validate the getter's backing list before replacing an inferred field.
+            if (field.get(target) === original) field.set(target, items)
         }.onFailure { throwable ->
             log("VideoDetailRelateFilter could not update response items field", throwable)
         }

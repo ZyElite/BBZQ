@@ -406,7 +406,7 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         if (removed == 0) return null
 
         param.result = filtered
-        writeBackFilteredItems(param.thisObject, symbols.itemsField, filtered)
+        writeBackFilteredItems(param.thisObject, symbols.itemsField, items, filtered)
         return FilterResult(removed, reasons)
     }
 
@@ -654,10 +654,17 @@ class HomeRecommendAdHook(env: RoamingEnv) : BaseRoamingHook(env) {
         return smallCard != true
     }
 
-    private fun writeBackFilteredItems(target: Any?, field: Field?, items: List<Any?>) {
+    private fun writeBackFilteredItems(
+        target: Any?,
+        field: Field?,
+        original: List<*>,
+        items: List<Any?>,
+    ) {
         if (target == null || field == null) return
         runCatching {
-            field.set(target, items)
+            // A wrapper's unique List field may belong to another getter.
+            // Only replace a field that still holds this call's original result.
+            if (field.get(target) === original) field.set(target, items)
         }.onFailure { throwable ->
             if (!fieldWriteFailedLogged) {
                 fieldWriteFailedLogged = true

@@ -115,7 +115,11 @@ class AiDeclaredVideoHook(env: RoamingEnv) : BaseRoamingHook(env) {
                 if (filtered.size == items.size) return@hookAfter
                 param.result = filtered
                 response.itemsField?.let { field ->
-                    runCatching { field.set(param.thisObject, filtered) }
+                    runCatching {
+                        val target = param.thisObject
+                        // The inferred field must actually back the getter result.
+                        if (field.get(target) === items) field.set(target, filtered)
+                    }
                         .onFailure { log("AiDeclaredVideo could not update home feed items field", it) }
                 }
                 log("AiDeclaredVideo removed ${items.size - filtered.size} home feed item(s)")
