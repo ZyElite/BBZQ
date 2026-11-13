@@ -2,18 +2,16 @@ package io.github.bbzq
 
 import android.app.Application
 import android.content.Context
-import android.os.Build
 import android.util.Log
 import io.github.bbzq.feats.RoamingRuntime
 import io.github.bbzq.utils.ReflectionUtils
 import io.github.libxposed.api.XposedInterface
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
-import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import java.util.concurrent.atomic.AtomicBoolean
 
 class BbzqModule : XposedModule() {
-    private var packageName: String = ""
     private var processName: String = ""
     private val attachHookInstalled = AtomicBoolean(false)
     private val runtimeStarted = AtomicBoolean(false)
@@ -38,22 +36,13 @@ class BbzqModule : XposedModule() {
         )
     }
 
-    override fun onPackageLoaded(param: PackageLoadedParam) {
+    override fun onPackageReady(param: PackageReadyParam) {
         if (environmentAbnormal) return
         val packageName = param.getPackageName()
         if (packageName !in TARGET_PACKAGES) return
-        if (!RoamingRuntime.isProcessSupported(packageName, processName)) {
-            log(
-                Log.INFO,
-                LOG_TAG,
-                "Skip unsupported process $processName for $packageName",
-            )
-            return
-        }
-        this.packageName = packageName
 
         if (attachHookInstalled.compareAndSet(false, true).not()) {
-            maybeStartRuntime(packageName, processName, resolvePackageClassLoader(param))
+            maybeStartRuntime(packageName, processName, param.getClassLoader())
             return
         }
 
@@ -68,11 +57,11 @@ class BbzqModule : XposedModule() {
                     packageName = packageName,
                     processName = processName,
                     application = application,
-                    classLoader = application.javaClass.classLoader ?: resolvePackageClassLoader(param),
+                    classLoader = application.classLoader ?: param.getClassLoader(),
                 )
             }
 
-        maybeStartRuntime(packageName, processName, resolvePackageClassLoader(param))
+        maybeStartRuntime(packageName, processName, param.getClassLoader())
     }
 
     private fun startRuntimeOnce(
@@ -81,7 +70,15 @@ class BbzqModule : XposedModule() {
         application: Context,
         classLoader: ClassLoader,
     ) {
+        // A container's currentApplication can still belong to its host at this phase.
+        // Do not consume the one-time initialization until the target is attached.
+        if (application.packageName != packageName) return
         if (runtimeStarted.compareAndSet(false, true).not()) return
+        HostRestartBridge.install(application, this, packageName, processName)
+        if (!RoamingRuntime.isProcessSupported(packageName, processName)) {
+            log(Log.INFO, LOG_TAG, "Skip unsupported roaming process $processName for $packageName")
+            return
+        }
         startRuntime(
             packageName = packageName,
             processName = processName,
@@ -117,7 +114,7 @@ class BbzqModule : XposedModule() {
         classLoader: ClassLoader,
     ) {
         val application = resolveCurrentApplication() ?: return
-        val resolvedClassLoader = application.javaClass.classLoader ?: classLoader
+        val resolvedClassLoader = application.classLoader ?: classLoader
         startRuntimeOnce(
             packageName = packageName,
             processName = processName,
@@ -130,15 +127,6 @@ class BbzqModule : XposedModule() {
         return runCatching {
             ReflectionUtils.safeInvoke(currentApplicationMethod, null) as? Application
         }.getOrNull()
-    }
-
-    private fun resolvePackageClassLoader(param: PackageLoadedParam): ClassLoader {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return param.getDefaultClassLoader()
-        }
-        return resolveCurrentApplication()?.javaClass?.classLoader
-            ?: Thread.currentThread().contextClassLoader
-            ?: javaClass.classLoader
     }
 
     private fun isFrameworkEnvironmentAbnormal(): Boolean =

@@ -45,6 +45,8 @@ BBZQ 是一款适配 Modern API 的哔哩哔哩功能增强模组，采用 Kotli
 本模组已集成 [NPatch-Remote-API](https://github.com/7723mod/NPatch-Remote-API)：
 - 免 Root 环境下**推荐使用 NPatch**（v1.0.9 或更高版本）。
 - 支持直接在桌面打开 BBZQ 独立应用修改各项设置，配置将通过 NPatch 管理器的 Remote Store 自动双向同步至目标应用，无需重新打包或每次进入宿主应用设置。
+- 其他 Xposed 实现提供 Modern API 102 或更高版本并声明远程配置能力时，可直接进入设置；原有 LSPosed 环境检查保留。
+- 支持上述远程能力时，「保存并重启」先提交设置，再通过作用域内的模块停止目标进程，确认退出后从当前应用环境重新启动，保留容器空间路由。模块未响应或退出超时会报告失败；其他环境保留原有 Root / Shizuku 重启方式。
 
 ---
 

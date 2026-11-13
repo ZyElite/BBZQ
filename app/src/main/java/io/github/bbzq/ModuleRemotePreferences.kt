@@ -171,6 +171,18 @@ object ModuleRemotePreferences : XposedServiceHelper.OnServiceListener {
         }
     }
 
+    internal fun prepareHostRestart(requestId: String) {
+        val currentService = checkNotNull(service) { "Xposed service is not connected" }
+        val context = checkNotNull(appContext) { "Module context is not initialized" }
+        val editor = currentService.remoteSettingsPreferences().edit()
+        // Flush user settings and the request in the same acknowledged transaction.
+        context.moduleSettingsPreferences().all.forEach { (key, value) ->
+            if (!isHostManagedKey(key)) editor.putValue(key, value)
+        }
+        editor.putString(ModuleSettings.KEY_HOST_RESTART_REQUEST_ID, requestId)
+        check(editor.commit()) { "remote preference commit failed" }
+    }
+
     fun requestSymbolCacheRefresh(callback: (String) -> Unit) {
         requestSymbolCacheRefresh(callback, serviceWaitAttempt = 0)
     }

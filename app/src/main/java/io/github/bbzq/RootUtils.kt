@@ -11,6 +11,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import io.github.bbzq.utils.ReflectionUtils
+import io.github.libxposed.api.XposedInterface
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -183,6 +184,16 @@ object RootUtils {
                 callback(false, errorMessage, method)
             }
         }
+        val framework = ModuleRemotePreferences.getFrameworkInfo()
+        val apiVersion = framework?.apiVersion?.toIntOrNull()
+        val properties = framework?.frameworkProperties?.toLongOrNull()
+        if (apiVersion != null && apiVersion >= XposedInterface.API_102 &&
+            properties != null && (properties and XposedInterface.PROP_CAP_REMOTE) != 0L
+        ) {
+            // External am commands cannot retain a container's target identity and space.
+            HostRestartBridge.restart(context, targetPackage, launchIntent, onRestartFinished)
+            return
+        }
         // -S stops the package and waits briefly before starting; -W reports the launch result.
         // Prefer -n <component> so am directly starts the launcher activity without URI parsing ambiguity.
         val component = launchIntent.component?.flattenToShortString()
@@ -224,8 +235,10 @@ object RootUtils {
                 context.applicationContext
             }
             launchContext.startActivity(foregroundIntent)
-        }
-        callback(true, null, method)
+        }.fold(
+            onSuccess = { callback(true, null, method) },
+            onFailure = { callback(false, it.message ?: it.javaClass.simpleName, method) },
+        )
     }
 
     private fun restartWithShizuku(
